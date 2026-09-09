@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12人割り勘計算アプリ</title>
+<!-- URLデータ圧縮用のライブラリを読み込み -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+<style>
+  :root {
+    --primary-color: #3b82f6;
+    --danger-color: #ef4444;
+    --success-color: #10b981;
+    --bg-color: #f3f4f6;
+    --card-bg: #ffffff;
+    --border-color: #e5e7eb;
+    --text-main: #1f2937;
+    --text-muted: #6b7280;
+  }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
+  }
+  
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  
+  h1, h2, h3 { color: #111827; margin-top: 0; }
+  
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--border-color);
+  }
+  
+  header h1 { margin: 0; font-size: 1.5rem; }
+  
+  .card {
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    margin-bottom: 24px;
+  }
+  
+  button {
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+  }
+  button:hover { background-color: #2563eb; }
+  .btn-danger { background-color: var(--danger-color); }
+  .btn-danger:hover { background-color: #dc2626; }
+  .btn-success { background-color: var(--success-color); }
+  .btn-success:hover { background-color: #059669; }
+
+  /* メンバー設定 */
+  .members-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-size: 14px;
+  }
+  
+  /* 決済追加フォーム */
+  .pay-title-container { margin-bottom: 15px; }
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 500px;
+  }
+  th, td {
+    padding: 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+  }
+  th { background-color: #f9fafb; font-weight: bold; }
+  th:first-child, td:first-child { text-align: left; }
+  td input[type="number"] { width: 100px; text-align: right; margin: 0 auto;}
+  td input[type="checkbox"] { transform: scale(1.4); cursor: pointer; }
+
+  /* 履歴と精算 */
+  details.history-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  details.history-item summary {
+    background: #f9fafb;
+    padding: 16px;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+  }
+  details.history-item summary:hover { background: #f3f4f6; }
+  
+  .history-content { padding: 20px; }
+  
+  /* 支払い状況と精算リストのスタイル */
+  .section-subtitle {
+    font-weight: bold;
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-bottom: 10px;
+    background: #f3f4f6;
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+  .payment-summary {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px dashed #cbd5e1;
+  }
+  .paid-list {
+    margin: 0;
+    padding-left: 24px;
+    color: var(--text-main);
+  }
+  .paid-list li { margin-bottom: 4px; }
+  
+  .settlement-list { list-style: none; padding: 0; margin: 0 0 20px 0; }
+  .settlement-list li {
+    padding: 12px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .settlement-list li:last-child { border-bottom: none; }
+  
+  .settlement-label { display: flex; align-items: center; cursor: pointer; font-size: 15px; }
+  .settlement-label input { margin-right: 15px; transform: scale(1.4); }
+  .arrow { color: var(--text-muted); margin: 0 10px; }
+  .amount-text { font-size: 1.1em; color: #ea580c; font-weight: bold; }
+  .empty-msg { color: var(--text-muted); text-align: center; padding: 20px; }
+  
+  @media (max-width: 600px) {
+    header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    details.history-item summary { flex-direction: column; align-items: flex-start; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>12人割り勘計算アプリ</h1>
+    <button class="btn-success" onclick="generateShareUrl()">🌐 この状態のURLを共有</button>
+  </header>
+
+  <!-- メンバー設定セクション -->
+  <section class="card">
+    <h2>1. メンバー名の設定</h2>
+    <div class="members-grid" id="members-list"></div>
+    <button onclick="saveMembers()">メンバー名を更新</button>
+  </section>
+
+  <!-- 決済の追加セクション -->
+  <section class="card">
+    <h2>2. 新しい決済を追加</h2>
+    <div class="pay-title-container">
+      <input type="text" id="pay-title" placeholder="何に対する支払いですか？ (例: 1次会の飲食代)">
+    </div>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>名前</th>
+            <th>払った金額 (円)</th>
+            <th>本来払うべき人 (参加者)</th>
+          </tr>
+        </thead>
+        <tbody id="pay-table-body">
+          <!-- JSで自動生成 -->
+        </tbody>
+      </table>
+    </div>
+    <button onclick="addPayment()">＋ 決済を履歴に追加する</button>
+  </section>
+
+  <!-- 履歴・精算セクション -->
+  <section class="card">
+    <h2>3. 決済履歴と個人ごとの精算額</h2>
+    <div id="history-list"></div>
+  </section>
+</div>
+
+<script>
+  let appState = {
+    names: Array.from({length: 12}, (_, i) => `メンバー${i+1}`),
+    history: []
+  };
+
+  // 初期化
+  window.onload = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const data = urlParams.get('data');
+    if (data) {
+      try {
+        appState = deserializeState(data);
+      } catch(e) {
+        console.error("データの復元に失敗しました", e);
+        alert("URLデータの読み込みに失敗したため、ローカルのデータを読み込みます。");
+        loadLocalState();
+      }
+    } else {
+      loadLocalState();
+    }
+    
+    // 常に12人分の枠を確保
+    while(appState.names.length < 12) {
+      appState.names.push(`メンバー${appState.names.length + 1}`);
+    }
+    
+    renderAll();
+  };
+
+  function loadLocalState() {
+    const saved = localStorage.getItem('warikan_app_state');
+    if (saved) {
+      try {
+        appState = JSON.parse(saved);
+      } catch(e) {}
+    }
+  }
+
+  function saveState() {
+    localStorage.setItem('warikan_app_state', JSON.stringify(appState));
+  }
+
+  // レンダリング全体
+  function renderAll() {
+    renderMembers();
+    renderPaymentForm();
+    renderHistory();
+  }
+
+  // 1. メンバー名レンダリング
+  function renderMembers() {
+    const container = document.getElementById('members-list');
+    container.innerHTML = '';
+    appState.names.forEach((name, i) => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = name;
+      input.id = `member-name-${i}`;
+      input.placeholder = `メンバー${i+1}`;
+      container.appendChild(input);
+    });
+  }
+
+  function saveMembers() {
+    for (let i = 0; i < 12; i++) {
+      const val = document.getElementById(`member-name-${i}`).value.trim();
+      appState.names[i] = val || `メンバー${i+1}`;
+    }
+    saveState();
+    renderPaymentForm();
+    renderHistory();
+    alert("メンバー名を更新しました。");
+  }
+
+  // 2. 決済フォームレンダリング
+  function renderPaymentForm() {
+    const tbody = document.getElementById('pay-table-body');
+    tbody.innerHTML = '';
+    appState.names.forEach((name, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${name}</td>
+        <td>
+          <input type="number" id="pay-amount-${i}" value="0" min="0" step="1"
+                 onfocus="if(this.value=='0')this.value=''" 
+                 onblur="if(this.value=='')this.value='0'">
+        </td>
+        <td>
+          <input type="checkbox" id="pay-participate-${i}" checked>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // 決済を追加
+  function addPayment() {
+    const title = document.getElementById('pay-title').value.trim() || "名称未設定の決済";
+    const paid = [];
+    const participants = [];
+    let totalPaid = 0;
+
+    for (let i = 0; i < 12; i++) {
+      const amount = parseInt(document.getElementById(`pay-amount-${i}`).value, 10) || 0;
+      const isParticipating = document.getElementById(`pay-participate-${i}`).checked;
+      paid.push(amount);
+      participants.push(isParticipating);
+      totalPaid += amount;
+    }
+
+    if (totalPaid === 0) {
+      alert("支払金額が0円です。金額を入力してください。");
+      return;
+    }
+    
+    if (participants.filter(p => p).length === 0) {
+      alert("参加者が選択されていません。最低でも1人にチェックを入れてください。");
+      return;
+    }
+
+    const payment = {
+      id: Date.now(),
+      title,
+      paid,
+      participants,
+      checks: {}
+    };
+
+    appState.history.unshift(payment); // 先頭に追加
+    saveState();
+
+    document.getElementById('pay-title').value = '';
+    renderPaymentForm();
+    renderHistory();
+  }
+
+  // 3. 履歴のレンダリング
+  function renderHistory() {
+    const container = document.getElementById('history-list');
+    container.innerHTML = '';
+
+    if (appState.history.length === 0) {
+      container.innerHTML = '<div class="empty-msg">決済履歴はありません。</div>';
+      return;
+    }
+
+    appState.history.forEach(payment => {
+      const total = payment.paid.reduce((a, b) => a + b, 0);
+      const settlements = calculateSettlements(payment.paid, payment.participants);
+      
+      const details = document.createElement('details');
+      details.className = 'history-item';
+      
+      const summary = document.createElement('summary');
+      summary.innerHTML = `
+        <span>${payment.title}</span>
+        <span style="color:var(--text-muted); font-weight:normal;">総額: ${total.toLocaleString()}円 ▼</span>
+      `;
+      details.appendChild(summary);
+      
+      const content = document.createElement('div');
+      content.className = 'history-content';
+      
+      // 最初の支払い状況を表示
+      const paymentSummary = document.createElement('div');
+      paymentSummary.className = 'payment-summary';
+      
+      const subTitle1 = document.createElement('div');
+      subTitle1.className = 'section-subtitle';
+      subTitle1.textContent = '【最初の支払い状況】';
+      paymentSummary.appendChild(subTitle1);
+      
+      const paidList = document.createElement('ul');
+      paidList.className = 'paid-list';
+      let hasPayer = false;
+      payment.paid.forEach((amount, i) => {
+        if (amount > 0) {
+          hasPayer = true;
+          const li = document.createElement('li');
+          li.innerHTML = `<strong>${appState.names[i]}</strong>: ${amount.toLocaleString()}円`;
+          paidList.appendChild(li);
+        }
+      });
+      
+      if (hasPayer) {
+        paymentSummary.appendChild(paidList);
+        content.appendChild(paymentSummary);
+      }
+
+      // 精算リストの表示
+      const subTitle2 = document.createElement('div');
+      subTitle2.className = 'section-subtitle';
+      subTitle2.textContent = '【精算（誰が誰に払うか）】';
+      content.appendChild(subTitle2);
+
+      if (settlements.length === 0) {
+        const noNeed = document.createElement('p');
+        noNeed.textContent = '精算の必要はありません（全額立て替えなし、または参加者なし）。';
+        content.appendChild(noNeed);
+      } else {
+        const ul = document.createElement('ul');
+        ul.className = 'settlement-list';
+        settlements.forEach(s => {
+          const fromName = appState.names[s.from];
+          const toName = appState.names[s.to];
+          const amount = s.amount.toLocaleString();
+          
+          const li = document.createElement('li');
+          const checkId = `${s.from}-${s.to}`;
+          const isChecked = payment.checks[checkId] ? 'checked' : '';
+          
+          li.innerHTML = `
+            <label class="settlement-label">
+              <input type="checkbox" onchange="toggleCheck(${payment.id}, '${checkId}', this.checked)" ${isChecked}>
+              <span>${fromName} <span class="arrow">→</span> ${toName} : <span class="amount-text">${amount}円</span></span>
+            </label>
+          `;
+          ul.appendChild(li);
+        });
+        content.appendChild(ul);
+      }
+      
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn-danger';
+      delBtn.style.marginTop = '10px';
+      delBtn.textContent = 'この決済を削除';
+      delBtn.onclick = () => deletePayment(payment.id);
+      content.appendChild(delBtn);
+      
+      details.appendChild(content);
+      container.appendChild(details);
+    });
+  }
+
+  // チェックボックスの状態保存
+  function toggleCheck(paymentId, checkId, isChecked) {
+    const payment = appState.history.find(p => p.id === paymentId);
+    if (payment) {
+      payment.checks[checkId] = isChecked;
+      saveState();
+    }
+  }
+
+  // 決済の削除
+  function deletePayment(id) {
+    if(confirm("この決済履歴を削除しますか？")) {
+      appState.history = appState.history.filter(p => p.id !== id);
+      saveState();
+      renderHistory();
+    }
+  }
+
+  // 割り勘の精算ロジック
+  function calculateSettlements(paidArray, participantsArray) {
+    const totalPaid = paidArray.reduce((sum, val) => sum + val, 0);
+    const participantCount = participantsArray.filter(p => p).length;
+    if (participantCount === 0 || totalPaid === 0) return [];
+
+    const perPerson = totalPaid / participantCount;
+    const balances = [];
+    
+    for (let i = 0; i < 12; i++) {
+      const paid = paidArray[i];
+      const shouldPay = participantsArray[i] ? perPerson : 0;
+      const balance = shouldPay - paid; 
+      balances.push({ index: i, balance: balance });
+    }
+
+    const debtors = balances.filter(b => b.balance > 0.1).sort((a, b) => b.balance - a.balance);
+    const creditors = balances.filter(b => b.balance < -0.1).sort((a, b) => a.balance - b.balance);
+
+    const settlements = [];
+    let d = 0, c = 0;
+
+    while (d < debtors.length && c < creditors.length) {
+      let debtor = debtors[d];
+      let creditor = creditors[c];
+      let amount = Math.min(debtor.balance, -creditor.balance);
+      
+      if (amount >= 0.5) {
+        settlements.push({
+          from: debtor.index,
+          to: creditor.index,
+          amount: Math.round(amount)
+        });
+      }
+
+      debtor.balance -= amount;
+      creditor.balance += amount;
+
+      if (debtor.balance < 0.1) d++;
+      if (creditor.balance > -0.1) c++;
+    }
+
+    return settlements;
+  }
+
+  // ==========================================
+  // URL共有・データ圧縮ロジック（LZStringを使用）
+  // ==========================================
+  function generateShareUrl() {
+    const compressedData = serializeState(appState);
+    const url = new URL(window.location.href);
+    url.searchParams.set('data', compressedData);
+    
+    const shareUrl = url.toString();
+    
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        alert("共有URLをクリップボードにコピーしました！\n（データ圧縮により以前より短いURLになっています）");
+      }).catch(() => {
+        prompt("以下のURLをコピーして共有してください:", shareUrl);
+      });
+    } else {
+      prompt("以下のURLをコピーして共有してください:", shareUrl);
+    }
+  }
+
+  // 状態をJSON化し、LZStringで強力に圧縮
+  function serializeState(state) {
+    const minified = {
+      n: state.names,
+      h: state.history.map(h => ({
+        i: h.id,
+        t: h.title,
+        p: h.paid,
+        pt: h.participants.map(p => p ? 1 : 0),
+        c: h.checks || {}
+      }))
+    };
+    // compressToEncodedURIComponent を使うことでURLセーフかつ短縮された文字列になります
+    return LZString.compressToEncodedURIComponent(JSON.stringify(minified));
+  }
+
+  // URLからデータを復元（以前の形式のURLにも対応できるよう後方互換処理入り）
+  function deserializeState(dataStr) {
+    let jsonStr;
+    try {
+      // まずLZStringでの解凍を試みる
+      jsonStr = LZString.decompressFromEncodedURIComponent(dataStr);
+      if (!jsonStr) throw new Error("LZString returned null");
+    } catch(e) {
+      // 失敗した場合は、以前の Base64(btoa) 方式での復元を試みる
+      jsonStr = decodeURIComponent(escape(atob(dataStr)));
+    }
+
+    const minified = JSON.parse(jsonStr);
+    return {
+      names: minified.n,
+      history: minified.h.map(h => ({
+        id: h.i,
+        title: h.t,
+        paid: h.p,
+        participants: h.pt.map(p => p === 1),
+        checks: h.c || {}
+      }))
+    };
+  }
+</script>
+
+</body>
+</html>
