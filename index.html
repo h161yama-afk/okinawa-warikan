@@ -11,6 +11,7 @@
     --primary-color: #3b82f6;
     --danger-color: #ef4444;
     --success-color: #10b981;
+    --warning-color: #f59e0b;
     --bg-color: #f3f4f6;
     --card-bg: #ffffff;
     --border-color: #e5e7eb;
@@ -36,16 +37,50 @@
   h1, h2, h3 { color: #111827; margin-top: 0; }
   
   header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
     margin-bottom: 20px;
     padding-bottom: 15px;
     border-bottom: 2px solid var(--border-color);
   }
-  
-  header h1 { margin: 0; font-size: 1.5rem; }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .header-top h1 { margin: 0; font-size: 1.5rem; }
+
+  /* 権限バッジ */
+  .mode-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .mode-badge.edit { background-color: #dbeafe; color: #1e40af; }
+  .mode-badge.view { background-color: #fef3c7; color: #92400e; }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .key-info {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    background: #eef2ff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px dashed #6366f1;
+  }
   
   .card {
     background: var(--card-bg);
@@ -53,6 +88,11 @@
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     margin-bottom: 24px;
+  }
+
+  /* 閲覧モードでロックされているときのカード表現 */
+  .card.disabled-card {
+    position: relative;
   }
   
   button {
@@ -64,13 +104,20 @@
     cursor: pointer;
     font-size: 14px;
     font-weight: bold;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, opacity 0.2s;
   }
   button:hover { background-color: #2563eb; }
+  button:disabled {
+    background-color: #9ca3af !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
   .btn-danger { background-color: var(--danger-color); }
   .btn-danger:hover { background-color: #dc2626; }
   .btn-success { background-color: var(--success-color); }
   .btn-success:hover { background-color: #059669; }
+  .btn-warning { background-color: var(--warning-color); }
+  .btn-warning:hover { background-color: #d97706; }
 
   /* メンバー設定 */
   .members-grid {
@@ -86,6 +133,11 @@
     border-radius: 6px;
     box-sizing: border-box;
     font-size: 14px;
+  }
+  input:disabled {
+    background-color: #f3f4f6;
+    color: #6b7280;
+    cursor: not-allowed;
   }
   
   /* 決済追加フォーム */
@@ -111,6 +163,7 @@
   th:first-child, td:first-child { text-align: left; }
   td input[type="number"] { width: 100px; text-align: right; margin: 0 auto;}
   td input[type="checkbox"] { transform: scale(1.4); cursor: pointer; }
+  td input[type="checkbox"]:disabled { cursor: not-allowed; }
 
   /* 履歴と精算 */
   details.history-item {
@@ -165,13 +218,24 @@
   .settlement-list li:last-child { border-bottom: none; }
   
   .settlement-label { display: flex; align-items: center; cursor: pointer; font-size: 15px; }
+  .settlement-label.disabled { cursor: not-allowed; opacity: 0.8; }
   .settlement-label input { margin-right: 15px; transform: scale(1.4); }
   .arrow { color: var(--text-muted); margin: 0 10px; }
   .amount-text { font-size: 1.1em; color: #ea580c; font-weight: bold; }
   .empty-msg { color: var(--text-muted); text-align: center; padding: 20px; }
   
+  .readonly-notice {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    font-size: 0.9rem;
+    font-weight: bold;
+  }
+
   @media (max-width: 600px) {
-    header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .header-top { flex-direction: column; align-items: flex-start; }
     details.history-item summary { flex-direction: column; align-items: flex-start; gap: 8px; }
   }
 </style>
@@ -180,20 +244,28 @@
 
 <div class="container">
   <header>
-    <h1>12人割り勘計算アプリ</h1>
-    <button class="btn-success" onclick="generateShareUrl()">🌐 この状態のURLを共有</button>
+    <div class="header-top">
+      <h1>12人割り勘計算アプリ</h1>
+      <div id="mode-badge-container"></div>
+    </div>
+    <div class="header-actions" id="header-actions">
+      <!-- 権限に応じた共有・ロック解除ボタンが表示されます -->
+    </div>
   </header>
 
   <!-- メンバー設定セクション -->
   <section class="card">
     <h2>1. メンバー名の設定</h2>
     <div class="members-grid" id="members-list"></div>
-    <button onclick="saveMembers()">メンバー名を更新</button>
+    <button id="btn-save-members" onclick="saveMembers()">メンバー名を更新</button>
   </section>
 
   <!-- 決済の追加セクション -->
   <section class="card">
     <h2>2. 新しい決済を追加</h2>
+    <div id="readonly-add-notice" class="readonly-notice" style="display:none;">
+      🔒 閲覧専用モードのため、新しい決済の追加はできません。
+    </div>
     <div class="pay-title-container">
       <input type="text" id="pay-title" placeholder="何に対する支払いですか？ (例: 1次会の飲食代)">
     </div>
@@ -211,7 +283,7 @@
         </tbody>
       </table>
     </div>
-    <button onclick="addPayment()">＋ 決済を履歴に追加する</button>
+    <button id="btn-add-payment" onclick="addPayment()">＋ 決済を履歴に追加する</button>
   </section>
 
   <!-- 履歴・精算セクション -->
@@ -223,14 +295,19 @@
 
 <script>
   let appState = {
+    editKey: '', // 編集権限用の暗号キー
     names: Array.from({length: 12}, (_, i) => `メンバー${i+1}`),
     history: []
   };
+
+  let isEditable = false; // 現在のユーザーが編集権限を持っているか
 
   // 初期化
   window.onload = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const data = urlParams.get('data');
+    const urlKey = urlParams.get('k');
+
     if (data) {
       try {
         appState = deserializeState(data);
@@ -241,6 +318,23 @@
       }
     } else {
       loadLocalState();
+    }
+
+    // 編集キーが未設定なら生成（新規データの場合）
+    if (!appState.editKey) {
+      appState.editKey = generateRandomKey();
+    }
+
+    // 編集権限の判定
+    // 1. URLパラメータのキー(k)が一致する
+    // 2. このブラウザのLocalStorageに編集権限が保持されている
+    // 3. データが存在しない新規作成時
+    const myKeys = getSavedKeys();
+    if (!data || urlKey === appState.editKey || myKeys.includes(appState.editKey)) {
+      isEditable = true;
+      saveKeyLocally(appState.editKey); // 権限をブラウザに記憶
+    } else {
+      isEditable = false;
     }
     
     // 常に12人分の枠を確保
@@ -264,11 +358,65 @@
     localStorage.setItem('warikan_app_state', JSON.stringify(appState));
   }
 
+  // ローカル記憶キー管理
+  function getSavedKeys() {
+    try {
+      return JSON.parse(localStorage.getItem('warikan_saved_keys') || '[]');
+    } catch(e) { return []; }
+  }
+  function saveKeyLocally(key) {
+    const keys = getSavedKeys();
+    if (!keys.includes(key)) {
+      keys.push(key);
+      localStorage.setItem('warikan_saved_keys', JSON.stringify(keys));
+    }
+  }
+
+  function generateRandomKey() {
+    return Math.random().toString(36).substring(2, 6).toUpperCase(); // 4桁の英数字
+  }
+
+  // パスコードを入力して編集権限を獲得
+  function unlockEditMode() {
+    const input = prompt("編集キー（パスコード）を入力してください:");
+    if (!input) return;
+    if (input.trim().toUpperCase() === appState.editKey.toUpperCase()) {
+      isEditable = true;
+      saveKeyLocally(appState.editKey);
+      renderAll();
+      alert("編集モードに切り替わりました。");
+    } else {
+      alert("編集キーが違います。");
+    }
+  }
+
   // レンダリング全体
   function renderAll() {
+    renderHeader();
     renderMembers();
     renderPaymentForm();
     renderHistory();
+  }
+
+  // ヘッダー（権限状態と操作ボタン）のレンダリング
+  function renderHeader() {
+    const badgeContainer = document.getElementById('mode-badge-container');
+    const actionsContainer = document.getElementById('header-actions');
+
+    if (isEditable) {
+      badgeContainer.innerHTML = `<span class="mode-badge edit">✏️ 編集可能モード</span>`;
+      actionsContainer.innerHTML = `
+        <span class="key-info">編集キー: <strong>${appState.editKey}</strong></span>
+        <button class="btn-success" onclick="shareUrl('view')">🔒 閲覧用URLを共有</button>
+        <button class="btn-warning" onclick="shareUrl('edit')">✏️ 編集用URLを共有</button>
+      `;
+    } else {
+      badgeContainer.innerHTML = `<span class="mode-badge view">🔒 閲覧専用モード</span>`;
+      actionsContainer.innerHTML = `
+        <button class="btn-warning" onclick="unlockEditMode()">🔑 編集キーを入力して編集</button>
+        <button class="btn-success" onclick="shareUrl('view')">🌐 閲覧用URLを共有</button>
+      `;
+    }
   }
 
   // 1. メンバー名レンダリング
@@ -281,11 +429,16 @@
       input.value = name;
       input.id = `member-name-${i}`;
       input.placeholder = `メンバー${i+1}`;
+      input.disabled = !isEditable; // 閲覧専用時は無効化
       container.appendChild(input);
     });
+
+    const btnSave = document.getElementById('btn-save-members');
+    btnSave.disabled = !isEditable;
   }
 
   function saveMembers() {
+    if (!isEditable) return;
     for (let i = 0; i < 12; i++) {
       const val = document.getElementById(`member-name-${i}`).value.trim();
       appState.names[i] = val || `メンバー${i+1}`;
@@ -299,18 +452,27 @@
   // 2. 決済フォームレンダリング
   function renderPaymentForm() {
     const tbody = document.getElementById('pay-table-body');
+    const titleInput = document.getElementById('pay-title');
+    const btnAdd = document.getElementById('btn-add-payment');
+    const notice = document.getElementById('readonly-add-notice');
+
     tbody.innerHTML = '';
+    titleInput.disabled = !isEditable;
+    btnAdd.disabled = !isEditable;
+    notice.style.display = isEditable ? 'none' : 'block';
+
     appState.names.forEach((name, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${name}</td>
         <td>
           <input type="number" id="pay-amount-${i}" value="0" min="0" step="1"
+                 ${!isEditable ? 'disabled' : ''}
                  onfocus="if(this.value=='0')this.value=''" 
                  onblur="if(this.value=='')this.value='0'">
         </td>
         <td>
-          <input type="checkbox" id="pay-participate-${i}" checked>
+          <input type="checkbox" id="pay-participate-${i}" checked ${!isEditable ? 'disabled' : ''}>
         </td>
       `;
       tbody.appendChild(tr);
@@ -319,6 +481,8 @@
 
   // 決済を追加
   function addPayment() {
+    if (!isEditable) return;
+
     const title = document.getElementById('pay-title').value.trim() || "名称未設定の決済";
     const paid = [];
     const participants = [];
@@ -350,7 +514,7 @@
       checks: {}
     };
 
-    appState.history.unshift(payment); // 先頭に追加
+    appState.history.unshift(payment);
     saveState();
 
     document.getElementById('pay-title').value = '';
@@ -385,7 +549,7 @@
       const content = document.createElement('div');
       content.className = 'history-content';
       
-      // 最初の支払い状況を表示
+      // 最初の支払い状況
       const paymentSummary = document.createElement('div');
       paymentSummary.className = 'payment-summary';
       
@@ -411,7 +575,7 @@
         content.appendChild(paymentSummary);
       }
 
-      // 精算リストの表示
+      // 精算リスト
       const subTitle2 = document.createElement('div');
       subTitle2.className = 'section-subtitle';
       subTitle2.textContent = '【精算（誰が誰に払うか）】';
@@ -434,8 +598,11 @@
           const isChecked = payment.checks[checkId] ? 'checked' : '';
           
           li.innerHTML = `
-            <label class="settlement-label">
-              <input type="checkbox" onchange="toggleCheck(${payment.id}, '${checkId}', this.checked)" ${isChecked}>
+            <label class="settlement-label ${!isEditable ? 'disabled' : ''}">
+              <input type="checkbox" 
+                     onchange="toggleCheck(${payment.id}, '${checkId}', this.checked)" 
+                     ${isChecked} 
+                     ${!isEditable ? 'disabled' : ''}>
               <span>${fromName} <span class="arrow">→</span> ${toName} : <span class="amount-text">${amount}円</span></span>
             </label>
           `;
@@ -444,12 +611,15 @@
         content.appendChild(ul);
       }
       
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn-danger';
-      delBtn.style.marginTop = '10px';
-      delBtn.textContent = 'この決済を削除';
-      delBtn.onclick = () => deletePayment(payment.id);
-      content.appendChild(delBtn);
+      // 編集可能時のみ削除ボタンを表示
+      if (isEditable) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-danger';
+        delBtn.style.marginTop = '10px';
+        delBtn.textContent = 'この決済を削除';
+        delBtn.onclick = () => deletePayment(payment.id);
+        content.appendChild(delBtn);
+      }
       
       details.appendChild(content);
       container.appendChild(details);
@@ -458,6 +628,7 @@
 
   // チェックボックスの状態保存
   function toggleCheck(paymentId, checkId, isChecked) {
+    if (!isEditable) return;
     const payment = appState.history.find(p => p.id === paymentId);
     if (payment) {
       payment.checks[checkId] = isChecked;
@@ -467,6 +638,7 @@
 
   // 決済の削除
   function deletePayment(id) {
+    if (!isEditable) return;
     if(confirm("この決済履歴を削除しますか？")) {
       appState.history = appState.history.filter(p => p.id !== id);
       saveState();
@@ -474,7 +646,7 @@
     }
   }
 
-  // 割り勘の精算ロジック
+  // 精算計算ロジック
   function calculateSettlements(paidArray, participantsArray) {
     const totalPaid = paidArray.reduce((sum, val) => sum + val, 0);
     const participantCount = participantsArray.filter(p => p).length;
@@ -520,29 +692,36 @@
   }
 
   // ==========================================
-  // URL共有・データ圧縮ロジック（LZStringを使用）
+  // URL共有・圧縮機能
   // ==========================================
-  function generateShareUrl() {
+  function shareUrl(type) {
     const compressedData = serializeState(appState);
     const url = new URL(window.location.href);
     url.searchParams.set('data', compressedData);
     
-    const shareUrl = url.toString();
+    if (type === 'edit') {
+      url.searchParams.set('k', appState.editKey);
+    } else {
+      url.searchParams.delete('k'); // 閲覧用には編集キーを含めない
+    }
+    
+    const shareUrlStr = url.toString();
+    const typeLabel = (type === 'edit') ? "【編集用URL】" : "【閲覧専用URL】";
     
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        alert("共有URLをクリップボードにコピーしました！\n（データ圧縮により以前より短いURLになっています）");
+      navigator.clipboard.writeText(shareUrlStr).then(() => {
+        alert(`${typeLabel}をクリップボードにコピーしました！\nLINEやメールで送ることができます。`);
       }).catch(() => {
-        prompt("以下のURLをコピーして共有してください:", shareUrl);
+        prompt(`${typeLabel}をコピーして共有してください:`, shareUrlStr);
       });
     } else {
-      prompt("以下のURLをコピーして共有してください:", shareUrl);
+      prompt(`${typeLabel}をコピーして共有してください:`, shareUrlStr);
     }
   }
 
-  // 状態をJSON化し、LZStringで強力に圧縮
   function serializeState(state) {
     const minified = {
+      k: state.editKey,
       n: state.names,
       h: state.history.map(h => ({
         i: h.id,
@@ -552,24 +731,21 @@
         c: h.checks || {}
       }))
     };
-    // compressToEncodedURIComponent を使うことでURLセーフかつ短縮された文字列になります
     return LZString.compressToEncodedURIComponent(JSON.stringify(minified));
   }
 
-  // URLからデータを復元（以前の形式のURLにも対応できるよう後方互換処理入り）
   function deserializeState(dataStr) {
     let jsonStr;
     try {
-      // まずLZStringでの解凍を試みる
       jsonStr = LZString.decompressFromEncodedURIComponent(dataStr);
       if (!jsonStr) throw new Error("LZString returned null");
     } catch(e) {
-      // 失敗した場合は、以前の Base64(btoa) 方式での復元を試みる
       jsonStr = decodeURIComponent(escape(atob(dataStr)));
     }
 
     const minified = JSON.parse(jsonStr);
     return {
+      editKey: minified.k || generateRandomKey(),
       names: minified.n,
       history: minified.h.map(h => ({
         id: h.i,
